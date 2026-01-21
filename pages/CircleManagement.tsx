@@ -567,6 +567,7 @@ const CircleManagement = () => {
                               <th className="px-6 py-4 text-center">ประเภท</th>
                               <th className="px-6 py-4 text-center">จำนวนมือ</th>
                               <th className="px-6 py-4 text-right">ยอดวง (Total Pot)</th>
+                              <th className="px-6 py-4 text-right">ดอกผลรวม</th>
                               <th className="px-6 py-4 text-center">วันที่เริ่ม - จบ</th>
                               <th className="px-6 py-4 text-center">จัดการ</th>
                           </tr>
@@ -575,6 +576,7 @@ const CircleManagement = () => {
                           {paginatedArchivedCircles.length > 0 ? paginatedArchivedCircles.map(circle => {
                               const payingSlots = Math.max(0, circle.totalSlots - 1);
                               const totalPotDisplay = circle.principal * payingSlots;
+                              const totalInterest = circle.rounds.reduce((sum, r) => sum + (r.bidAmount || 0), 0);
                               const endDate = calculateEndDate(circle.startDate, circle.period, circle.totalSlots);
 
                               return (
@@ -597,6 +599,9 @@ const CircleManagement = () => {
                                       </td>
                                       <td className="px-6 py-4 text-right font-bold text-slate-700">
                                           ฿{totalPotDisplay.toLocaleString()}
+                                      </td>
+                                      <td className="px-6 py-4 text-right font-bold text-amber-600">
+                                          +฿{totalInterest.toLocaleString()}
                                       </td>
                                       <td className="px-6 py-4 text-center text-xs text-slate-500">
                                           {new Date(circle.startDate).toLocaleDateString('th-TH')} - {endDate}
@@ -623,7 +628,7 @@ const CircleManagement = () => {
                               );
                           }) : (
                               <tr>
-                                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                                  <td colSpan={7} className="py-12 text-center text-slate-400">
                                       {archiveSearch || filterMonth || filterType !== 'ALL' ? 'ไม่พบข้อมูลตามเงื่อนไขการกรอง' : 'ยังไม่มีประวัติวงที่จบการเล่น'}
                                   </td>
                               </tr>

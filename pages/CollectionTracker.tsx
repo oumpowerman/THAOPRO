@@ -90,17 +90,21 @@ const CollectionTracker = () => {
       }).sort((a,b) => a.roundNumber - b.roundNumber);
   }, [activeCircle]);
 
-  // SMART ROUND SELECTION: Select latest visible round by default
+  // SMART ROUND SELECTION: Always select current active round when circle changes
   useEffect(() => {
-      if (activeCircle && visibleRounds.length > 0) {
-          const isCurrentVisible = visibleRounds.some(r => r.roundNumber === selectedRoundNum);
-          if (!isCurrentVisible) {
-               setSelectedRoundNum(visibleRounds[visibleRounds.length - 1].roundNumber);
+      if (activeCircle) {
+          // Find the first round that is OPEN or COLLECTING
+          const currentRound = activeCircle.rounds.find(r => r.status === 'OPEN' || r.status === 'COLLECTING');
+          
+          if (currentRound) {
+              setSelectedRoundNum(currentRound.roundNumber);
+          } else {
+              // If no open round (e.g. all completed), select the last one
+              const lastRound = activeCircle.rounds[activeCircle.rounds.length - 1];
+              setSelectedRoundNum(lastRound ? lastRound.roundNumber : 1);
           }
-      } else if (activeCircle && visibleRounds.length === 0) {
-          setSelectedRoundNum(1); 
       }
-  }, [activeCircle, visibleRounds, selectedRoundNum]);
+  }, [activeCircle?.id]); 
 
   // USE CUSTOM HOOK FOR LOGIC
   const { paymentData } = useCollectionLogic({
@@ -108,7 +112,6 @@ const CollectionTracker = () => {
   });
 
   // --- FIX: Global Pending Transactions for Banner (Sync with Sidebar) ---
-  // Use 'circles' (ALL circles) instead of 'trackableCircles' to catch everything
   const allMyCircleIds = circles.map(c => c.id);
   const globalPendingTxs = transactions.filter(t => 
       t.status === 'WAITING_APPROVAL' && allMyCircleIds.includes(t.circleId)

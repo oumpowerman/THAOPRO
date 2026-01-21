@@ -60,7 +60,6 @@ const BiddingSystem = () => {
   const circle = biddingCircles.find(c => c.id === selectedCircleId);
   
   // Filter ALIVE members AND exclude Pid Ton (because they don't bid normally, unless it's the last round logic)
-  // Note: We handle Pid Ton selection manually in the UI logic below
   const aliveMembers = circle ? circle.members.filter(m => m.status === 'ALIVE' && (!m.pidTonAmount || m.pidTonAmount <= 0)) : [];
 
   // Determine the correct round number for Bidding
@@ -98,14 +97,20 @@ const BiddingSystem = () => {
           } else {
               // Reset if switching circles
               setBidderId('');
-              if (circle.biddingType === BiddingType.AUCTION) {
-                  setBidAmount(isFirstRound ? 0 : circle.minBid || 0);
+              
+              const onlyOneLeft = aliveMembers.length === 1;
+
+              // Logic for default bid: 0 if first round, last round, or only 1 player remaining. Otherwise minBid.
+              if (isFirstRound || isLastRound || onlyOneLeft) {
+                  setBidAmount(0);
+              } else if (circle.biddingType === BiddingType.AUCTION) {
+                  setBidAmount(circle.minBid || 0);
               } else {
                   setBidAmount(0);
               }
           }
       }
-  }, [selectedCircleId, circle, isFirstRound, isLastRound, pidTonMember]);
+  }, [selectedCircleId, circle, isFirstRound, isLastRound, pidTonMember, aliveMembers.length]);
 
   const getMemberInfo = (id: string) => {
       const foundMember = members.find(m => m.id === id);
@@ -236,6 +241,7 @@ const BiddingSystem = () => {
       circle.biddingType !== BiddingType.AUCTION || 
       isFirstRound || 
       isLastRound ||
+      aliveMembers.length === 1 || // Valid if only one player remains (auto-win logic allows 0 bid)
       (Number(bidAmount) >= circle.minBid)
   );
 
@@ -343,11 +349,13 @@ const BiddingSystem = () => {
                 </div>
                 {circle ? (
                 <>
-                    {isFirstRound && (
+                    {(isFirstRound || aliveMembers.length === 1) && (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
                             <Star className="text-amber-500 shrink-0 mt-0.5" size={16} />
                             <div className="text-xs text-amber-800">
-                                <span className="font-bold">งวดแรก (มือท้าว):</span> ไม่จำกัดขั้นต่ำ สามารถใส่ดอกเบี้ย 0 บาทได้
+                                <span className="font-bold">
+                                    {isFirstRound ? 'งวดแรก (มือท้าว)' : 'เหลือผู้เล่นคนเดียว'} :
+                                </span> ไม่จำกัดขั้นต่ำ สามารถใส่ดอกเบี้ย 0 บาทได้
                             </div>
                         </div>
                     )}
@@ -417,7 +425,7 @@ const BiddingSystem = () => {
                                 className={`w-full p-3 pl-10 border rounded-xl bg-white text-slate-900 focus:ring-2 focus:outline-none text-lg font-bold ${!isBidValid ? 'border-red-300 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:ring-blue-500'}`}
                                 placeholder="0.00"
                                 value={bidAmount}
-                                min={circle.biddingType === BiddingType.AUCTION && !isFirstRound && !isLastRound ? circle.minBid : 0}
+                                min={circle.biddingType === BiddingType.AUCTION && !isFirstRound && !isLastRound && aliveMembers.length > 1 ? circle.minBid : 0}
                                 step={circle.bidStep}
                                 onChange={(e) => setBidAmount(Number(e.target.value))}
                             />
@@ -426,7 +434,7 @@ const BiddingSystem = () => {
                         
                         {circle.biddingType === BiddingType.AUCTION && (
                             <div className="mt-2 flex justify-between text-xs text-slate-500">
-                                <span>ขั้นต่ำ: <strong>{isFirstRound || isLastRound ? 'ไม่กำหนด' : circle.minBid}</strong></span>
+                                <span>ขั้นต่ำ: <strong>{isFirstRound || isLastRound || aliveMembers.length === 1 ? 'ไม่กำหนด' : circle.minBid}</strong></span>
                                 <span>เพิ่มทีละ: <strong>{circle.bidStep}</strong></span>
                             </div>
                         )}
