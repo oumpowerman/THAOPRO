@@ -16,6 +16,8 @@ import { CollectionToolbar } from '../components/collection/CollectionToolbar';
 import { ManualPayModal } from '../components/collection/modals/ManualPayModal';
 import { OverviewDebtsModal } from '../components/collection/modals/OverviewDebtsModal';
 import { ScoreDeductionModal } from '../components/collection/modals/ScoreDeductionModal';
+import { CircleSelector } from '../components/collection/CircleSelector';
+import { CollectionHeader } from '../components/collection/CollectionHeader';
 
 const CollectionTracker = () => {
   const { circles, members, transactions, payouts, approveTransaction, rejectTransaction, createTransaction, user, showAlert } = useAppContext();
@@ -73,8 +75,6 @@ const CollectionTracker = () => {
   const activeCircle = trackableCircles.find(c => c.id === selectedCircleId);
 
   // --- ROUND VISIBILITY LOGIC (Updated) ---
-  // 1. Auction: Only show rounds that are 'COLLECTING' or 'COMPLETED' (Winner exists)
-  // 2. Fixed: Only show rounds where Date <= Today OR 'COMPLETED' (History)
   const visibleRounds = useMemo(() => {
       if (!activeCircle) return [];
       return activeCircle.rounds.filter(r => {
@@ -93,15 +93,12 @@ const CollectionTracker = () => {
   // SMART ROUND SELECTION: Select latest visible round by default
   useEffect(() => {
       if (activeCircle && visibleRounds.length > 0) {
-          // If current selected round is NOT in the visible list (e.g. future round), reset to latest visible
           const isCurrentVisible = visibleRounds.some(r => r.roundNumber === selectedRoundNum);
           if (!isCurrentVisible) {
                setSelectedRoundNum(visibleRounds[visibleRounds.length - 1].roundNumber);
           }
       } else if (activeCircle && visibleRounds.length === 0) {
-          // Fallback if no rounds are visible (e.g. Fixed start date in future)
-          // Maybe set to 0 or handle in UI
-          setSelectedRoundNum(1); // Default strictly, though data might be empty
+          setSelectedRoundNum(1); 
       }
   }, [activeCircle, visibleRounds, selectedRoundNum]);
 
@@ -110,10 +107,11 @@ const CollectionTracker = () => {
       circles, members, transactions, payouts, user, selectedCircleId, selectedRoundNum
   });
 
-  // Global Pending Transactions for Banner
-  const myCircleIds = trackableCircles.map(c => c.id);
+  // --- FIX: Global Pending Transactions for Banner (Sync with Sidebar) ---
+  // Use 'circles' (ALL circles) instead of 'trackableCircles' to catch everything
+  const allMyCircleIds = circles.map(c => c.id);
   const globalPendingTxs = transactions.filter(t => 
-      t.status === 'WAITING_APPROVAL' && myCircleIds.includes(t.circleId)
+      t.status === 'WAITING_APPROVAL' && allMyCircleIds.includes(t.circleId)
   );
 
   // --- CALCULATE HISTORICAL DEBTS (For Overview Modal) ---
@@ -121,8 +119,6 @@ const CollectionTracker = () => {
       if (!activeCircle) return [];
       const debts: any[] = [];
 
-      // Only check debts for VISIBLE rounds (Current and Past)
-      // We don't want to show debts for future rounds
       visibleRounds.forEach(round => {
           activeCircle.members.forEach(member => {
               const txs = transactions.filter(t => 
@@ -294,10 +290,15 @@ const CollectionTracker = () => {
       return a.slotNumber - b.slotNumber;
   });
 
+  // Calculate Stats for Current Round
   const currentRoundPayers = paymentData.filter(p => p.amountExpected > 0);
   const paidCount = currentRoundPayers.filter(p => (p.status as string) === 'PAID' || (p.status as string) === 'PAYOUT_COMPLETED').length;
   const totalCount = currentRoundPayers.length;
   const progressPercent = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
+  
+  // Calculate Money Stats for Current Round
+  const collectedAmountRound = currentRoundPayers.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
+  const expectedAmountRound = currentRoundPayers.reduce((sum, p) => sum + (p.amountExpected || 0), 0);
 
   // --- UPDATED LOGIC: Total Stats based on VISIBLE ROUNDS ONLY ---
   const { totalCollectedBills, totalExpectedBills } = useMemo(() => {
@@ -306,7 +307,6 @@ const CollectionTracker = () => {
       let collected = 0;
       let expected = 0;
 
-      // Iterating ONLY over visibleRounds (Current & Past)
       visibleRounds.forEach(round => {
           activeCircle.members.forEach(member => {
               const calc = calculateSharePayment(
@@ -614,26 +614,24 @@ const CollectionTracker = () => {
            </button>
        </div>
 
-       {/* STATS LAYOUT */}
-       <div className="flex flex-col xl:flex-row gap-4 items-stretch">
-           <div className="w-full xl:w-1/2">
-                <CurrentRoundStat 
-                    selectedRoundNum={selectedRoundNum}
-                    paidCount={paidCount}
-                    totalCount={totalCount}
-                    progressPercent={progressPercent}
-                />
-           </div>
+       {/* STATS LAYOUT (REFACTORED UI) */}
+       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+           <CurrentRoundStat 
+               selectedRoundNum={selectedRoundNum}
+               paidCount={paidCount}
+               totalCount={totalCount}
+               progressPercent={progressPercent}
+               collectedAmount={collectedAmountRound}
+               expectedAmount={expectedAmountRound}
+           />
 
-           <div className="w-full xl:w-1/2">
-               <OverallStat 
-                    totalCollectedBills={totalCollectedBills}
-                    totalExpectedBills={totalExpectedBills}
-                    overallProgress={overallProgress}
-                    outstandingBills={outstandingBills}
-                    onShowOverview={() => setShowOverviewModal(true)}
-               />
-           </div>
+           <OverallStat 
+                totalCollectedBills={totalCollectedBills}
+                totalExpectedBills={totalExpectedBills}
+                overallProgress={overallProgress}
+                outstandingBills={outstandingBills}
+                onShowOverview={() => setShowOverviewModal(true)}
+           />
        </div>
 
        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
