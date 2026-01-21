@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, ArrowLeft, ChevronRight, Users, Clock, Calendar, RefreshCcw, LayoutGrid, List, Wallet, TrendingUp, PieChart, ShieldCheck, ClipboardCheck } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronRight, Users, Clock, Calendar, RefreshCcw, LayoutGrid, List, Wallet, TrendingUp, PieChart, ShieldCheck, ClipboardCheck, Loader2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Transaction, TransactionStatus, CircleStatus, SharePeriod, ShareType, BiddingType } from '../types';
 import { AlertModal } from '../components/AlertModal';
@@ -22,17 +22,13 @@ import { CollectionHeader } from '../components/collection/CollectionHeader';
 const CollectionTracker = () => {
   const { circles, members, transactions, payouts, approveTransaction, rejectTransaction, createTransaction, user, showAlert } = useAppContext();
   const [selectedCircleId, setSelectedCircleId] = useState<string>('');
-  const [selectedRoundNum, setSelectedRoundNum] = useState<number>(1);
+  // Initialize as 0 to indicate "calculating" state
+  const [selectedRoundNum, setSelectedRoundNum] = useState<number>(0);
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   
   // VIEW MODE STATE
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
-
-  // FORCE RESET
-  useEffect(() => {
-      setSelectedCircleId('');
-  }, []);
 
   // Review Modal State
   const [reviewingTx, setReviewingTx] = useState<{
@@ -74,41 +70,67 @@ const CollectionTracker = () => {
 
   const activeCircle = trackableCircles.find(c => c.id === selectedCircleId);
 
-  // --- ROUND VISIBILITY LOGIC (Updated) ---
+  // --- ROUND VISIBILITY LOGIC (Fixed) ---
   const visibleRounds = useMemo(() => {
       if (!activeCircle) return [];
-      return activeCircle.rounds.filter(r => {
-          if (activeCircle.biddingType === BiddingType.AUCTION) {
-              return r.status === 'COLLECTING' || r.status === 'COMPLETED';
-          } else {
-              if (r.status === 'COMPLETED' || r.status === 'COLLECTING') return true;
-              const today = new Date();
-              today.setHours(23,59,59,999);
-              const rDate = new Date(r.date);
-              return rDate <= today;
-          }
-      }).sort((a,b) => a.roundNumber - b.roundNumber);
+      
+      const sorted = [...activeCircle.rounds].sort((a,b) => a.roundNumber - b.roundNumber);
+      
+      return sorted.filter(r => {
+          // Always show rounds that are active or collecting, regardless of date
+          if (r.status === 'COLLECTING' || r.status === 'OPEN') return true;
+          
+          // For completed rounds, show them
+          if (r.status === 'COMPLETED') return true;
+
+          // Fallback date check (for future rounds that are NOT open yet)
+          const today = new Date();
+          today.setHours(23,59,59,999);
+          const rDate = new Date(r.date);
+          return rDate <= today;
+      });
   }, [activeCircle]);
 
-  // SMART ROUND SELECTION: Always select current active round when circle changes
+  // SMART ROUND SELECTION: Calculate correct round on Circle Change
   useEffect(() => {
-      if (activeCircle) {
-          // Find the first round that is OPEN or COLLECTING
-          const currentRound = activeCircle.rounds.find(r => r.status === 'OPEN' || r.status === 'COLLECTING');
+      if (activeCircle && activeCircle.rounds.length > 0) {
+          // Sort rounds to ensure we check in order
+          const sortedRounds = [...activeCircle.rounds].sort((a, b) => a.roundNumber - b.roundNumber);
           
-          if (currentRound) {
-              setSelectedRoundNum(currentRound.roundNumber);
-          } else {
-              // If no open round (e.g. all completed), select the last one
-              const lastRound = activeCircle.rounds[activeCircle.rounds.length - 1];
-              setSelectedRoundNum(lastRound ? lastRound.roundNumber : 1);
+          // Priority 1: Rounds currently 'COLLECTING' (Approved winner, collecting money)
+          let targetRound = sortedRounds.find(r => r.status === 'COLLECTING');
+          
+          // Priority 2: If no collecting round, logic for displaying the most relevant round
+          if (!targetRound) {
+              const lastRound = sortedRounds[sortedRounds.length - 1];
+              
+              // If the latest round is OPEN (Waiting for bid) and it's NOT the first round,
+              // we usually want to see the PREVIOUS round (History/Completed) because OPEN rounds have no money to collect yet.
+              if (lastRound.status === 'OPEN' && lastRound.roundNumber > 1) {
+                  // Fallback to previous round (Round - 1)
+                  targetRound = sortedRounds.find(r => r.roundNumber === lastRound.roundNumber - 1);
+              } 
+              
+              // If we still don't have a target (e.g., Round 1 is OPEN, or logic failed), default to the last available round
+              if (!targetRound) {
+                  targetRound = lastRound;
+              }
           }
+
+          if (targetRound) {
+              setSelectedRoundNum(targetRound.roundNumber);
+          } else {
+              setSelectedRoundNum(1);
+          }
+      } else {
+          setSelectedRoundNum(0); // Reset if no circle
       }
-  }, [activeCircle?.id]); 
+  }, [activeCircle]); // Depend on activeCircle object to catch updates
 
   // USE CUSTOM HOOK FOR LOGIC
+  // Pass 1 if 0 to prevent crashes, but we will hide UI if 0
   const { paymentData } = useCollectionLogic({
-      circles, members, transactions, payouts, user, selectedCircleId, selectedRoundNum
+      circles, members, transactions, payouts, user, selectedCircleId, selectedRoundNum: selectedRoundNum || 1
   });
 
   // --- FIX: Global Pending Transactions for Banner (Sync with Sidebar) ---
@@ -295,13 +317,17 @@ const CollectionTracker = () => {
 
   // Calculate Stats for Current Round
   const currentRoundPayers = paymentData.filter(p => p.amountExpected > 0);
+  
+  // Headcount Stats (for Text Display)
   const paidCount = currentRoundPayers.filter(p => (p.status as string) === 'PAID' || (p.status as string) === 'PAYOUT_COMPLETED').length;
   const totalCount = currentRoundPayers.length;
-  const progressPercent = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
   
-  // Calculate Money Stats for Current Round
+  // Financial Stats (for Progress Bar)
   const collectedAmountRound = currentRoundPayers.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
   const expectedAmountRound = currentRoundPayers.reduce((sum, p) => sum + (p.amountExpected || 0), 0);
+  
+  // Progress Percent based on AMOUNT
+  const progressPercent = expectedAmountRound > 0 ? (collectedAmountRound / expectedAmountRound) * 100 : 0;
 
   // --- UPDATED LOGIC: Total Stats based on VISIBLE ROUNDS ONLY ---
   const { totalCollectedBills, totalExpectedBills } = useMemo(() => {
@@ -342,7 +368,7 @@ const CollectionTracker = () => {
   
   // Calculate Winner Info for Toolbar
   let winnerInfo = null;
-  if (activeCircle) {
+  if (activeCircle && selectedRoundNum > 0) {
       const roundData = activeCircle.rounds.find(r => r.roundNumber === selectedRoundNum);
       if (roundData && roundData.winnerId) {
           const winner = members.find(m => m.id === roundData.winnerId);
@@ -431,7 +457,7 @@ const CollectionTracker = () => {
                                 return (
                                     <div 
                                         key={circle.id}
-                                        onClick={() => setSelectedCircleId(circle.id)}
+                                        onClick={() => { setSelectedCircleId(circle.id); setSelectedRoundNum(0); }}
                                         className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-blue-900/5 hover:border-blue-200 cursor-pointer transition-all duration-300 group relative overflow-hidden flex flex-col h-full"
                                     >
                                         {/* Status Stripe */}
@@ -513,7 +539,7 @@ const CollectionTracker = () => {
                                         return (
                                             <tr 
                                                 key={circle.id} 
-                                                onClick={() => setSelectedCircleId(circle.id)}
+                                                onClick={() => { setSelectedCircleId(circle.id); setSelectedRoundNum(0); }}
                                                 className="hover:bg-slate-50 transition-colors cursor-pointer group"
                                             >
                                                 <td className="px-6 py-4">
@@ -577,6 +603,17 @@ const CollectionTracker = () => {
                   daysLate={scoreDeductionState?.daysLate || 0}
                   onConfirm={handleConfirmScoreDeduction}
               />
+          </div>
+      );
+  }
+
+  // --- LOADING STATE (When Round Not Calculated) ---
+  if (selectedRoundNum === 0) {
+      return (
+          <div className="flex flex-col items-center justify-center h-[50vh] text-slate-400">
+              <Loader2 size={48} className="animate-spin text-blue-500 mb-4" />
+              <p className="font-bold text-lg text-slate-600">กำลังโหลดข้อมูล...</p>
+              <p className="text-xs">Calculating active round</p>
           </div>
       );
   }
