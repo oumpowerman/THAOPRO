@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ThaoPro - ระบบจัดการวงแชร์มืออาชีพ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Sarabun', sans-serif;
+        background-color: #f3f4f6;
+      }
+
+      /* Custom White Scrollbar Settings */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background-color: rgba(0, 0, 0, 0.05); /* รางเลื่อนสีจางๆ */
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background-color: #ffffff; /* ตัวเลื่อนสีขาว */
+        border: 1px solid #cbd5e1; /* ขอบสีเทาอ่อนเพื่อให้เห็นชัดบนพื้นขาว */
+        border-radius: 6px; /* ความโค้งมน */
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: #f1f5f9; /* สีเมื่อเอาเมาส์ชี้ */
+        border-color: #94a3b8;
+      }
+
+      /* Firefox Scrollbar Support */
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #ffffff #f1f5f9;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
